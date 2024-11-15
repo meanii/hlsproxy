@@ -15,10 +15,20 @@ func NewServer(address string) *Server {
 	return &Server{Address: address}
 }
 
+// AddWildRouter specifically for handling *.m3u8 files
 func (s *Server) AddWildRouter() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		w.Write([]byte("heello"))
+	})
+}
+
+// AddChildProxyRouter for handling routed sub-hls and
+// chunks segments
+func (s *Server) AddChildProxyRouter() {
+	http.HandleFunc("/hlsproxy/:id", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("not implimented yet"))
 	})
 }
 

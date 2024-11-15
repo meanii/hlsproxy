@@ -18,7 +18,12 @@ type GlobalConfig struct {
 			URL string `yaml:"url"`
 		} `yaml:"orgin_server"`
 		Ffmpeg struct {
-			Bin string `yaml:"bin"`
+			Bin   string `yaml:"bin"`
+			Codec struct {
+				Video string `yaml:"video"`
+				Audio string `yaml:"audio"`
+			} `yaml:"codec"`
+			Variants []string `yaml:"variant"`
 		} `yaml:"ffmpeg"`
 		Cache struct {
 			Dirname string `yaml:"dirname"`
@@ -37,9 +42,11 @@ func New(filename string) *GlobalConfig {
 func (gc *GlobalConfig) load(filename string) *GlobalConfig {
 	wd, err := os.Getwd()
 	if err != nil {
+		fmt.Println(err)
 		zap.S().Fatalf("coudnt get wording dir, Error: %s", err)
 	}
 	configpath := path.Join(wd, filename)
+	zap.S().Infof("using configpath: %s", configpath)
 	configbyte, _ := gc.readConfigFile(configpath)
 	config := gc.unmarshel(configbyte)
 
@@ -64,8 +71,8 @@ func (gc *GlobalConfig) readConfigFile(filepath string) ([]byte, error) {
 
 func (gc *GlobalConfig) unmarshel(config []byte) *GlobalConfig {
 	cnf := GlobalConfig{}
-	fmt.Printf("config %s", config)
-	err := yaml.Unmarshal(config, cnf)
+	zap.S().Debugf("config view:\n %s", config)
+	err := yaml.Unmarshal(config, &cnf)
 	if err != nil {
 		zap.S().Fatalf("failed to decode yaml, Error: %s", err)
 	}
