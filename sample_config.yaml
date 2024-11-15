@@ -1,0 +1,15 @@
+version: "1"
+name: "hlsproxy"
+
+# glboal configuration
+config:
+  # orgin server configuration
+  origin_server:
+    url: "http://localhost:8888"
+
+  # ffmpeg configuration
+  ffmpeg:
+    bin: "/opt/homebrew/bin/ffmpeg"
+  # cache dirname
+  cache:
+    dirname: ".cache"
