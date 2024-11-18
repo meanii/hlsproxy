@@ -19,5 +19,6 @@ func main() {
 
 	httpServer := server.NewServer(*addr)
 	httpServer.AddWildRouter()
+	httpServer.AddChildProxyRouter()
 	httpServer.StartAndListen()
 }

@@ -16,7 +16,7 @@ type GlobalConfig struct {
 	Config  struct {
 		OriginServer struct {
 			URL string `yaml:"url"`
-		} `yaml:"orgin_server"`
+		} `yaml:"origin_server"`
 		Ffmpeg struct {
 			Bin   string `yaml:"bin"`
 			Codec struct {
