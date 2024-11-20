@@ -31,20 +31,56 @@ const (
 	AAC AudioCodecType = iota
 )
 
+func (vc VideoCodecType) StringFourCC() string {
+	switch vc {
+	case H265:
+		return "hev1.1.6.L93.B0"
+	case H264:
+		return "avc1.4d40"
+	}
+	return "avc1.4d40"
+}
+
+func (ac AudioCodecType) StringFourCC() string {
+	switch ac {
+	case AAC:
+		return "mp4a.40.5"
+	}
+	return "mp4a.40.5"
+}
+
+func (vc VideoCodecType) String() string {
+	switch vc {
+	case H265:
+		return "H265"
+	case H264:
+		return "H264"
+	}
+	return "H264"
+}
+
+func (ac AudioCodecType) String() string {
+	switch ac {
+	case AAC:
+		return "AAC"
+	}
+	return "AAC"
+}
+
 type Transcoder struct {
-	ID                 string
-	MasterFileName     string
-	FfmpegBin          string
-	Source             string
-	Varients           []string
-	VideoCodec         VideoCodecType
-	AudioCodec         AudioCodecType
-	AudioEnable        bool
-	OutputDir          string
-	VideoResolutionMap map[string]string
-	MasterHls          string
-	Mux                sync.RWMutex
-	wg                 sync.WaitGroup
+	ID             string
+	MasterFileName string
+	FfmpegBin      string
+	Source         string
+	Varients       []string
+	VideoCodec     VideoCodecType
+	AudioCodec     AudioCodecType
+	FrameRate      float64
+	AudioEnable    bool
+	OutputDir      string
+	MasterHls      string
+	Mux            sync.RWMutex
+	wg             sync.WaitGroup
 }
 
 func NewTranscoder(source string, ID string) *Transcoder {
@@ -55,15 +91,7 @@ func NewTranscoder(source string, ID string) *Transcoder {
 
 	tscconfig.FfmpegBin = config.GetConfig("").Config.Ffmpeg.Bin
 	tscconfig.Varients = []string{"240p", "360p", "audio"}
-	tscconfig.VideoResolutionMap = map[string]string{
-		"240p":  "426x240",
-		"360p":  "640x360",
-		"480p":  "854x480",
-		"720p":  "1280x720",
-		"1080p": "1920x1080",
-		"1440p": "2560x1440",
-		"2160p": "3840x2160",
-	}
+
 	tscconfig.VideoCodec = H264
 	tscconfig.AudioCodec = AAC
 
@@ -119,10 +147,8 @@ func (t *Transcoder) Run() (string, error) {
 		varientName := t.Varients[index]
 		varientURL := fmt.Sprintf("http://localhost:8001/hlsproxy/%s/%s/%s.m3u8", t.ID, varientName, varientName)
 		genrateVarient := m3u8.Variant{
-			URI: varientURL,
-			VariantParams: m3u8.VariantParams{
-				Resolution: t.getResolution(varient),
-			},
+			URI:           varientURL,
+			VariantParams: t.getVideoMeatadata(varient),
 		}
 		initialMasterHls.Variants = append(initialMasterHls.Variants, &genrateVarient)
 
@@ -175,7 +201,7 @@ func (t *Transcoder) generateCmdString() string {
 	suffixtree := make([]string, 0)
 
 	for _, varient := range t.Varients {
-		resolution := t.getResolution(varient)
+		resolution := t.getVideoMeatadata(varient).Resolution
 		if varient != "audio" {
 			segmentFilename := "%03d.ts"
 			cmd := fmt.Sprintf("-s %s -start_number 0 -hls_time 2 -hls_list_size 10 -hls_flags delete_segments+split_by_time -hls_segment_filename %s/%s/%s -b:v 500k -maxrate 500k -bufsize 1000k -f hls %s/%s/%s.m3u8 ",
@@ -228,10 +254,8 @@ func (t *Transcoder) generateMasterHls() (m3u8.MasterPlaylist, error) {
 
 	for _, varient := range t.Varients {
 		genrateVarient := m3u8.Variant{
-			URI: fmt.Sprintf("%s/%s.m3u8", varient, varient),
-			VariantParams: m3u8.VariantParams{
-				Resolution: t.getResolution(varient),
-			},
+			URI:           fmt.Sprintf("%s/%s.m3u8", varient, varient),
+			VariantParams: t.getVideoMeatadata(varient),
 		}
 		masterHls.Variants = append(masterHls.Variants, &genrateVarient)
 	}
@@ -248,10 +272,87 @@ func (t *Transcoder) writeFile(filepath string, data []byte) error {
 	return err
 }
 
-func (t *Transcoder) getResolution(varient string) string {
-	resolution, ok := t.VideoResolutionMap[varient]
-	if !ok {
-		resolution = t.VideoResolutionMap[DefaultResolution]
+func (t *Transcoder) getVideoMeatadata(varient string) m3u8.VariantParams {
+	ONEKBPS := uint32(1000)
+
+	videoVarients := map[string]m3u8.VariantParams{
+		"240p": {
+			ProgramId:  1,
+			Resolution: "426x240",
+			Name:       "240p",
+			Codecs:     t.VideoCodec.StringFourCC(),
+			Bandwidth:  500 * ONEKBPS,
+			FrameRate:  t.FrameRate,
+		},
+		"360p": {
+			ProgramId:  2,
+			Resolution: "640x360",
+			Name:       "360p",
+			Codecs:     t.VideoCodec.StringFourCC(),
+			Bandwidth:  1200 * ONEKBPS,
+			FrameRate:  t.FrameRate,
+		},
+		"480p": {
+			ProgramId:  3,
+			Resolution: "854x480",
+			Name:       "480p",
+			Codecs:     t.VideoCodec.StringFourCC(),
+			Bandwidth:  3000 * ONEKBPS,
+			FrameRate:  t.FrameRate,
+		},
+		"720p": {
+			ProgramId:  4,
+			Resolution: "1280x720",
+			Name:       "720p",
+			Codecs:     t.VideoCodec.StringFourCC(),
+			Bandwidth:  5000 * ONEKBPS,
+			FrameRate:  t.FrameRate,
+		},
+		"1080p": {
+			ProgramId:  5,
+			Resolution: "192x1080",
+			Name:       "1080p",
+			Codecs:     t.VideoCodec.StringFourCC(),
+			Bandwidth:  7000 * ONEKBPS,
+			FrameRate:  t.FrameRate,
+		},
+		"1440p": {
+			ProgramId:  6,
+			Resolution: "2560x1440",
+			Name:       "2K",
+			Codecs:     t.VideoCodec.StringFourCC(),
+			Bandwidth:  10000 * ONEKBPS,
+			FrameRate:  t.FrameRate,
+		},
+		"2160p": {
+			ProgramId:  7,
+			Resolution: "3840x2160",
+			Name:       "4K",
+			Codecs:     t.VideoCodec.StringFourCC(),
+			Bandwidth:  15000 * ONEKBPS,
+			FrameRate:  t.FrameRate,
+		},
+		"audio": {
+			ProgramId: 8,
+			Name:      "audio",
+			Codecs:    t.AudioCodec.StringFourCC(),
+			Bandwidth: 192 * ONEKBPS,
+		},
 	}
-	return resolution
+
+	for _, varientmd := range videoVarients {
+		if t.AudioEnable {
+			audio, ok := videoVarients["audio"]
+			if !ok {
+				zap.S().Warn("didnt get any audio meatdata")
+			}
+			varientmd.Audio = audio.Name
+		}
+	}
+
+	metadata, found := videoVarients[varient]
+	if !found {
+		return videoVarients[DefaultResolution]
+	}
+	return metadata
 }
