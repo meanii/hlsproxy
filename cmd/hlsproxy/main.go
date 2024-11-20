@@ -21,6 +21,6 @@ func main() {
 
 	// adding routers
 	httpServer.AddHlsRouter()
-	httpServer.AddChildProxyRouter()
+	httpServer.AddFSServerRouter()
 	httpServer.StartAndListen()
 }

@@ -1,0 +1,20 @@
+---
+version: "1"
+name: hlsproxy
+config:
+  origin_server:
+    url: http://localhost:8888
+  ffmpeg:
+    bin: /opt/homebrew/bin/ffmpeg
+    codec:
+      video: "h264"
+      audio: "AAC"
+    variant:
+      - 360p
+      - 480p
+      - 720p
+      - 1080p
+      - 1440p # (2k)
+      - 2160p # (4k)
+  output:
+    dirname: output

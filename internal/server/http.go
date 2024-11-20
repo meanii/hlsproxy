@@ -21,7 +21,8 @@ func NewServer(address string) *Server {
 	return &Server{Address: address}
 }
 
-// AddWildRouter specifically for handling *.m3u8 files
+// AddHlsRouter specifically for handling hls files
+// handling input as HLS only
 func (s *Server) AddHlsRouter() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		sourceHlsURL := r.URL
@@ -43,9 +44,9 @@ func (s *Server) AddHlsRouter() {
 	})
 }
 
-// AddChildProxyRouter for handling routed sub-hls and
+// AddFSServerRouter for handling routed sub-hls and
 // chunks segments
-func (s *Server) AddChildProxyRouter() {
+func (s *Server) AddFSServerRouter() {
 	wd, _ := os.Getwd()
 	fspath := path.Join(wd, config.GlobalConfigInstance.Config.Output.Dirname)
 	zap.S().Infof("registering file server %s", fspath)
