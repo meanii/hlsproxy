@@ -160,8 +160,9 @@ func (t *Transcoder) Run() (string, error) {
 	zap.S().Infof("transcoder, generated master.m3u8 hls file, %s\nm3u8file: %s", initialMasterHls.Variants[len(initialMasterHls.Variants)-1].URI, initialMasterHls.String())
 
 	cmdrunnerpool := externalcmd.NewPool()
-	_ = externalcmd.NewCmd(
+	rtmpPullCmd := externalcmd.NewCmd(
 		cmdrunnerpool, cmdstring, true, make(externalcmd.Environment), nil)
+	rtmpPullCmd.SetStreamID(t.ID)
 
 	t.isReadToPlay()
 	t.wg.Wait()
@@ -346,7 +347,7 @@ func (t *Transcoder) getVideoMeatadata(varient string) m3u8.VariantParams {
 			if !ok {
 				zap.S().Warn("didnt get any audio meatdata")
 			}
-			varientmd.Audio = audio.Name
+			varientmd.Audio = audio.Name //nolint:noused
 		}
 	}
 

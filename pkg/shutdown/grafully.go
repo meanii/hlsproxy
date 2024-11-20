@@ -19,6 +19,7 @@ func EnableGrafullyShutdown() {
 		// killing all running processes, in order to avoid ghost processes
 		for _, cmd := range externalcmd.GloblaActiveCmds {
 			zap.S().Infof("closing httpproxy gracefully...\ncmdstring: %s", cmd.GetCmdString())
+			cmd.Close()
 			syscall.Kill(-cmd.GetProcess().Pid, syscall.SIGINT)
 			err := cmd.Process.Kill()
 			if err != nil {

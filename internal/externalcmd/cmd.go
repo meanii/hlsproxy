@@ -22,16 +22,18 @@ type Environment map[string]string
 
 // Cmd is an external command.
 type Cmd struct {
-	pool    *Pool
-	cmdstr  string
-	restart bool
-	env     Environment
-	onExit  func(error)
+	pool     *Pool
+	cmdstr   string
+	restart  bool
+	env      Environment
+	onExit   func(error)
+	StreamID string
 
 	Process *os.Process
 
 	// in
 	terminate chan struct{}
+	cmdDone   chan int
 }
 
 var GloblaActiveCmds []*Cmd
@@ -64,6 +66,7 @@ func NewCmd(
 		env:       env,
 		onExit:    onExit,
 		terminate: make(chan struct{}),
+		cmdDone:   make(chan int),
 	}
 
 	pool.wg.Add(1)
@@ -72,6 +75,14 @@ func NewCmd(
 	GloblaActiveCmds = append(GloblaActiveCmds, e)
 
 	return e
+}
+
+func (e *Cmd) SetStreamID(streamID string) {
+	e.StreamID = streamID
+}
+
+func (e *Cmd) Done() {
+	e.cmdDone <- 0
 }
 
 // Close closes the command. It doesn't wait for the command to exit.

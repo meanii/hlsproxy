@@ -6,9 +6,11 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"syscall"
 
 	"github.com/google/uuid"
 	"github.com/meanii/hlsproxy/config"
+	"github.com/meanii/hlsproxy/internal/externalcmd"
 	"github.com/meanii/hlsproxy/internal/transcoder"
 	"go.uber.org/zap"
 )
@@ -38,6 +40,8 @@ func NewServer(address string) *Server {
 // POST /rtmp/
 // DELETE /rtmp/:id
 func (s *Server) AddRtmpRouter() {
+	// POST /rtmp resposible to create rtmp pull stream and generate
+	// hls stream
 	http.HandleFunc("POST /rtmp", func(w http.ResponseWriter, r *http.Request) {
 		decode := json.NewDecoder(r.Body)
 		var rtmpBody rtmpConfigHTTP
@@ -64,6 +68,35 @@ func (s *Server) AddRtmpRouter() {
 
 		w.WriteHeader(200)
 		w.Write([]byte("started hlsproxy."))
+	})
+
+	// DELETE /rtmp/{id} resposible to termanating running rtmp pulling stream
+	http.HandleFunc("DELETE /rtmp/", func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("id")
+
+		if id == "" {
+			w.WriteHeader(400)
+			w.Write([]byte("provide stream id"))
+		}
+		zap.S().Infof("termanating running hls streaming ID:%s", id)
+
+		activeCmds := externalcmd.GloblaActiveCmds
+		zap.S().Infof("total number of runnings hls streaming Count:%s", len(activeCmds))
+		for _, cmd := range activeCmds {
+			if cmd.StreamID == id {
+				cmd.Done()
+				zap.S().Infof("closing httpproxy gracefully...\ncmdstring: %s", cmd.GetCmdString())
+				syscall.Kill(-cmd.GetProcess().Pid, syscall.SIGINT)
+				err := cmd.GetProcess().Kill()
+				if err != nil {
+					zap.S().Errorf("failed to terminate hls stream ID:%s", cmd.StreamID)
+				}
+				zap.S().Infof("closed processid: %s", cmd.GetProcess().Pid)
+			}
+		}
+
+		w.WriteHeader(200)
+		w.Write([]byte("success"))
 	})
 }
 

@@ -36,9 +36,8 @@ func (e *Cmd) runOSSpecific(env []string) error {
 	// adding process to keep in record
 	e.Process = cmd.Process
 
-	cmdDone := make(chan int)
 	go func() {
-		cmdDone <- func() int {
+		e.cmdDone <- func() int {
 			err := cmd.Wait()
 			if err == nil {
 				return 0
@@ -56,10 +55,10 @@ func (e *Cmd) runOSSpecific(env []string) error {
 		zap.S().Infof("killing process id: %s", cmd.Process.Pid)
 		// the minus is needed to kill all subprocesses
 		syscall.Kill(-cmd.Process.Pid, syscall.SIGINT) //nolint:errcheck
-		<-cmdDone
+		<-e.cmdDone
 		return errTerminated
 
-	case c := <-cmdDone:
+	case c := <-e.cmdDone:
 		if c != 0 {
 			return fmt.Errorf("command exited with code %d", c)
 		}
