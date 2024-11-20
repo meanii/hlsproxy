@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"sync"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -25,18 +26,23 @@ type GlobalConfig struct {
 			} `yaml:"codec"`
 			Variants []string `yaml:"variant"`
 		} `yaml:"ffmpeg"`
-		Cache struct {
+		Output struct {
 			Dirname string `yaml:"dirname"`
-		} `yaml:"cache"`
+		} `yaml:"output"`
 	} `yaml:"config"`
 }
 
-var GlobalConfigInstance *GlobalConfig
+var (
+	GlobalConfigInstance *GlobalConfig
+	once                 sync.Once
+)
 
-func New(filename string) *GlobalConfig {
-	cfg := &GlobalConfig{}
-	cfginstance := cfg.load(filename)
-	return cfginstance
+func GetConfig(filename string) *GlobalConfig {
+	once.Do(func() {
+		cfg := &GlobalConfig{}
+		GlobalConfigInstance = cfg.load(filename)
+	})
+	return GlobalConfigInstance
 }
 
 func (gc *GlobalConfig) load(filename string) *GlobalConfig {

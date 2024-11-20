@@ -15,10 +15,12 @@ func main() {
 	zaplogger := logger.SetupGlobalLogger()
 	defer zaplogger.Sync()
 
-	config.New(*configfile)
+	_ = config.GetConfig(*configfile)
 
 	httpServer := server.NewServer(*addr)
-	httpServer.AddWildRouter()
+
+	// adding routers
+	httpServer.AddHlsRouter()
 	httpServer.AddChildProxyRouter()
 	httpServer.StartAndListen()
 }

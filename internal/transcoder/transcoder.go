@@ -15,6 +15,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const DefaultResolution = "720p"
+
 type (
 	VideoCodecType int
 	AudioCodecType int
@@ -31,17 +33,17 @@ const (
 
 type Transcoder struct {
 	ID                 string
+	MasterFileName     string
 	FfmpegBin          string
 	SourceHls          string
 	Varients           []string
 	VideoCodec         VideoCodecType
 	AudioCodec         AudioCodecType
-	CacheDir           string
+	OutputDir          string
 	VideoResolutionMap map[string]string
 	MasterHls          string
 	Mux                sync.RWMutex
 	wg                 sync.WaitGroup
-	Ready              chan bool
 }
 
 func NewTranscoder(sourceHls string, ID string) *Transcoder {
@@ -63,6 +65,7 @@ func NewTranscoder(sourceHls string, ID string) *Transcoder {
 	}
 	config.VideoCodec = H264
 	config.AudioCodec = AAC
+	config.MasterFileName = "playlist.m3u8"
 	return &config
 }
 
@@ -78,9 +81,9 @@ func (t *Transcoder) Run() (string, error) {
 
 	for index, varient := range t.Varients {
 		varientName := t.Varients[index]
-		varientUrl := fmt.Sprintf("http://localhost:8001/hlsproxy/%s/%s/%s.m3u8", t.ID, varientName, varientName)
+		varientURL := fmt.Sprintf("http://localhost:8001/hlsproxy/%s/%s/%s.m3u8", t.ID, varientName, varientName)
 		genrateVarient := m3u8.Variant{
-			URI: varientUrl,
+			URI: varientURL,
 			VariantParams: m3u8.VariantParams{
 				Resolution: t.getResolution(varient),
 			},
@@ -105,24 +108,24 @@ func (t *Transcoder) Run() (string, error) {
 
 func (t *Transcoder) isReadToPlay() {
 	zap.S().Infof("transcoder: waiting for transcoder to start")
-	t.checkGeneratedTs()
+	t.checkGeneratedTS()
 	zap.S().Infof("transcoder: ready to play")
 }
 
-func (t *Transcoder) checkGeneratedTs() error {
-	var foundTsChunks bool
+func (t *Transcoder) checkGeneratedTS() error {
+	var foundTSChunks bool
 	for {
-		files := utils.FindFiles(t.CacheDir, ".ts")
+		files := utils.FindFiles(t.OutputDir, ".ts")
 		zap.S().Infof("transcoder: found %d chunks", len(files))
 		for _, file := range files {
 			zap.S().Infof("transcoder: found %s file", file)
 			if strings.HasSuffix(file, ".ts") {
 				zap.S().Infof("transcoder: found %s", file)
-				foundTsChunks = true
+				foundTSChunks = true
 				break
 			}
 		}
-		if foundTsChunks {
+		if foundTSChunks {
 			break
 		}
 		time.Sleep(1 * time.Second)
@@ -141,10 +144,10 @@ func (t *Transcoder) generateCmdString() string {
 			segmentFilename := "%03d.ts"
 			cmd := fmt.Sprintf("-s %s -start_number 0 -hls_time 2 -hls_list_size 10 -hls_flags delete_segments+split_by_time -hls_segment_filename %s/%s/%s -b:v 500k -maxrate 500k -bufsize 1000k -f hls %s/%s/%s.m3u8 ",
 				resolution,
-				t.CacheDir,
+				t.OutputDir,
 				varient,
 				segmentFilename,
-				t.CacheDir,
+				t.OutputDir,
 				varient,
 				varient,
 			)
@@ -154,9 +157,9 @@ func (t *Transcoder) generateCmdString() string {
 		if varient == "audio" {
 			segmentFilename := "%03d.ts"
 			cmd := fmt.Sprintf("-map 0:a -start_number 0 -hls_time 2 -hls_list_size 10 -hls_flags delete_segments+split_by_time -hls_segment_filename %s/audio/%s -b:a 128k -f hls %s/audio/audio.m3u8 ",
-				t.CacheDir,
+				t.OutputDir,
 				segmentFilename,
-				t.CacheDir,
+				t.OutputDir,
 			)
 			suffixtree = append(suffixtree, cmd)
 		}
@@ -172,10 +175,11 @@ func (t *Transcoder) generateCmdString() string {
 
 func (t *Transcoder) prepareOutputDir() {
 	wd, _ := os.Getwd()
-	t.CacheDir = path.Join(wd, config.GlobalConfigInstance.Config.Cache.Dirname, t.ID)
-	zap.S().Infof("setting up output dir: %s", t.CacheDir)
+	t.OutputDir = path.Join(wd, config.GetConfig("").Config.Output.Dirname, t.ID)
+	zap.S().Infof("setting up output dir: %s", t.OutputDir)
+
 	for _, varient := range t.Varients {
-		varientPath := path.Join(t.CacheDir, varient)
+		varientPath := path.Join(t.OutputDir, varient)
 		err := os.MkdirAll(varientPath, os.ModePerm)
 		if err != nil {
 			zap.S().Warnf("transcoder: failed to mkdir, Error: %s", err)
@@ -197,7 +201,7 @@ func (t *Transcoder) generateMasterHls() (m3u8.MasterPlaylist, error) {
 	}
 
 	zap.S().Infof("transcoder, generated master.m3u8 hls file, %s", masterHls.String())
-	masterfilepath := path.Join(t.CacheDir, "playlist.m3u8")
+	masterfilepath := path.Join(t.OutputDir, t.MasterFileName)
 	t.MasterHls = masterfilepath
 	err := t.writeFile(masterfilepath, []byte(masterHls.String()))
 	return *masterHls, err
@@ -211,7 +215,7 @@ func (t *Transcoder) writeFile(filepath string, data []byte) error {
 func (t *Transcoder) getResolution(varient string) string {
 	resolution, ok := t.VideoResolutionMap[varient]
 	if !ok {
-		resolution = t.VideoResolutionMap["720p"]
+		resolution = t.VideoResolutionMap[DefaultResolution]
 	}
 	return resolution
 }

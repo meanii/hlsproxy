@@ -16,5 +16,5 @@ config:
       - 1080p
       - 1440p # (2k)
       - 2160p # (4k)
-  cache:
-    dirname: .cache
+  output:
+    dirname: output
