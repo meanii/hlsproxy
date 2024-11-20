@@ -6,6 +6,7 @@ import (
 	"github.com/meanii/hlsproxy/config"
 	"github.com/meanii/hlsproxy/internal/server"
 	"github.com/meanii/hlsproxy/pkg/logger"
+	"github.com/meanii/hlsproxy/pkg/shutdown"
 )
 
 func main() {
@@ -17,9 +18,12 @@ func main() {
 
 	_ = config.GetConfig(*configfile)
 
+	shutdown.EnableGrafullyShutdown()
+
 	httpServer := server.NewServer(*addr)
 
 	// adding routers
+	httpServer.AddRtmpRouter()
 	httpServer.AddHlsRouter()
 	httpServer.AddFSServerRouter()
 	httpServer.StartAndListen()

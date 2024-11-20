@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/kballard/go-shellquote"
+	"go.uber.org/zap"
 )
 
 func (e *Cmd) runOSSpecific(env []string) error {
@@ -32,6 +33,9 @@ func (e *Cmd) runOSSpecific(env []string) error {
 		return err
 	}
 
+	// adding process to keep in record
+	e.Process = cmd.Process
+
 	cmdDone := make(chan int)
 	go func() {
 		cmdDone <- func() int {
@@ -49,6 +53,7 @@ func (e *Cmd) runOSSpecific(env []string) error {
 
 	select {
 	case <-e.terminate:
+		zap.S().Infof("killing process id: %s", cmd.Process.Pid)
 		// the minus is needed to kill all subprocesses
 		syscall.Kill(-cmd.Process.Pid, syscall.SIGINT) //nolint:errcheck
 		<-cmdDone

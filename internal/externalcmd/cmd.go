@@ -28,9 +28,13 @@ type Cmd struct {
 	env     Environment
 	onExit  func(error)
 
+	Process *os.Process
+
 	// in
 	terminate chan struct{}
 }
+
+var GloblaActiveCmds []*Cmd
 
 // NewCmd allocates a Cmd.
 func NewCmd(
@@ -65,6 +69,7 @@ func NewCmd(
 	pool.wg.Add(1)
 
 	go e.run()
+	GloblaActiveCmds = append(GloblaActiveCmds, e)
 
 	return e
 }
@@ -103,8 +108,17 @@ func (e *Cmd) run() {
 
 		select {
 		case <-time.After(restartPause):
+
 		case <-e.terminate:
 			return
 		}
 	}
+}
+
+func (e *Cmd) GetCmdString() string {
+	return e.cmdstr
+}
+
+func (e *Cmd) GetProcess() *os.Process {
+	return e.Process
 }

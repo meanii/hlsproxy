@@ -35,7 +35,7 @@ type Transcoder struct {
 	ID                 string
 	MasterFileName     string
 	FfmpegBin          string
-	SourceHls          string
+	Source             string
 	Varients           []string
 	VideoCodec         VideoCodecType
 	AudioCodec         AudioCodecType
@@ -46,14 +46,15 @@ type Transcoder struct {
 	wg                 sync.WaitGroup
 }
 
-func NewTranscoder(sourceHls string, ID string) *Transcoder {
-	config := Transcoder{
-		SourceHls: sourceHls,
-		ID:        ID,
+func NewTranscoder(source string, ID string) *Transcoder {
+	tscconfig := Transcoder{
+		Source: source,
+		ID:     ID,
 	}
-	config.FfmpegBin = "/usr/bin/ffmpeg"
-	config.Varients = []string{"240p", "360p", "audio"}
-	config.VideoResolutionMap = map[string]string{
+
+	tscconfig.FfmpegBin = config.GetConfig("").Config.Ffmpeg.Bin
+	tscconfig.Varients = []string{"240p", "360p", "audio"}
+	tscconfig.VideoResolutionMap = map[string]string{
 		"240p":  "426x240",
 		"360p":  "640x360",
 		"480p":  "854x480",
@@ -63,10 +64,11 @@ func NewTranscoder(sourceHls string, ID string) *Transcoder {
 		"2160p": "3840x2160",
 		"audio": "audio",
 	}
-	config.VideoCodec = H264
-	config.AudioCodec = AAC
-	config.MasterFileName = "playlist.m3u8"
-	return &config
+	tscconfig.VideoCodec = H264
+	tscconfig.AudioCodec = AAC
+
+	tscconfig.MasterFileName = "playlist.m3u8"
+	return &tscconfig
 }
 
 func (t *Transcoder) Run() (string, error) {
@@ -135,7 +137,7 @@ func (t *Transcoder) checkGeneratedTS() error {
 }
 
 func (t *Transcoder) generateCmdString() string {
-	prefix := fmt.Sprintf("%s -i \"%s\" -loglevel repeat+level+verbose -profile:v baseline -level 3.0 ", t.FfmpegBin, t.SourceHls)
+	prefix := fmt.Sprintf("%s -i \"%s\" -loglevel repeat+level+verbose -profile:v baseline -level 3.0 ", t.FfmpegBin, t.Source)
 	suffixtree := make([]string, 0)
 
 	for _, varient := range t.Varients {

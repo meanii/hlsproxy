@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,13 +17,55 @@ type Server struct {
 	Address string
 }
 
+type rtmpConfigHTTP struct {
+	ID      string `json:"id"`
+	RtmpURL string `json:"rtmp_url"`
+	Config  struct {
+		Varients   []string `json:"varients"`
+		VideoCodec string   `json:"video_codec"`
+		AudioCodec string   `json:"audio_codec"`
+		Audio      bool     `json:"audio"`
+	} `json:"config"`
+}
+
 func NewServer(address string) *Server {
 	zap.S().Infof("starting httproxy server at %s", address)
 	return &Server{Address: address}
 }
 
+// AddRtmpRouter specifically handling for rtmp as input
+// and users can additionally use their own configurations
+// POST /rtmp/
+// DELETE /rtmp/:id
+func (s *Server) AddRtmpRouter() {
+	http.HandleFunc("POST /rtmp", func(w http.ResponseWriter, r *http.Request) {
+		decode := json.NewDecoder(r.Body)
+		var rtmpBody rtmpConfigHTTP
+		err := decode.Decode(&rtmpBody)
+		if err != nil {
+			zap.S().Errorf("failed to decode POST /rtmp body", err)
+			w.WriteHeader(400)
+			w.Write([]byte("something went wrong!"))
+			return
+		}
+
+		zap.S().Infof("starting rtpm hlsproxy %+v", rtmpBody)
+		tscRunner := transcoder.NewTranscoder(rtmpBody.RtmpURL, rtmpBody.ID)
+		_, err = tscRunner.Run()
+		if err != nil {
+			w.WriteHeader(500)
+			w.Write([]byte("failed to register hlsproxy"))
+			return
+		}
+
+		w.WriteHeader(200)
+		w.Write([]byte("started hlsproxy."))
+	})
+}
+
 // AddHlsRouter specifically for handling hls files
 // handling input as HLS only
+// GET /*.m3u8
 func (s *Server) AddHlsRouter() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		sourceHlsURL := r.URL
@@ -46,6 +89,7 @@ func (s *Server) AddHlsRouter() {
 
 // AddFSServerRouter for handling routed sub-hls and
 // chunks segments
+// GET /hlsproxy/*
 func (s *Server) AddFSServerRouter() {
 	wd, _ := os.Getwd()
 	fspath := path.Join(wd, config.GlobalConfigInstance.Config.Output.Dirname)
