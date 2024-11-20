@@ -5,10 +5,13 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/grafov/m3u8"
 	"github.com/meanii/hlsproxy/config"
 	"github.com/meanii/hlsproxy/internal/externalcmd"
+	"github.com/meanii/hlsproxy/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -36,6 +39,9 @@ type Transcoder struct {
 	CacheDir           string
 	VideoResolutionMap map[string]string
 	MasterHls          string
+	Mux                sync.RWMutex
+	wg                 sync.WaitGroup
+	Ready              chan bool
 }
 
 func NewTranscoder(sourceHls string, ID string) *Transcoder {
@@ -43,7 +49,7 @@ func NewTranscoder(sourceHls string, ID string) *Transcoder {
 		SourceHls: sourceHls,
 		ID:        ID,
 	}
-	config.FfmpegBin = "/opt/homebrew/bin/ffmpeg"
+	config.FfmpegBin = "/usr/bin/ffmpeg"
 	config.Varients = []string{"240p", "360p", "audio"}
 	config.VideoResolutionMap = map[string]string{
 		"240p":  "426x240",
@@ -60,25 +66,80 @@ func NewTranscoder(sourceHls string, ID string) *Transcoder {
 	return &config
 }
 
-func (t *Transcoder) Run() error {
+func (t *Transcoder) Run() (string, error) {
 	t.prepareOutputDir()
 	cmdstring := t.generateCmdString()
-	err := t.generateMasterHls()
+	_, err := t.generateMasterHls()
+	if err != nil {
+		zap.S().Errorf("failed to start trasncoder, Error: %s", err)
+	}
+
+	initialMasterHls := m3u8.NewMasterPlaylist()
+
+	for index, varient := range t.Varients {
+		varientName := t.Varients[index]
+		varientUrl := fmt.Sprintf("http://localhost:8001/hlsproxy/%s/%s/%s.m3u8", t.ID, varientName, varientName)
+		genrateVarient := m3u8.Variant{
+			URI: varientUrl,
+			VariantParams: m3u8.VariantParams{
+				Resolution: t.getResolution(varient),
+			},
+		}
+		initialMasterHls.Variants = append(initialMasterHls.Variants, &genrateVarient)
+
+		zap.S().Infof("transcoder, generated %s.m3u8 hls file, %s", varientName)
+	}
+
+	t.wg.Add(1)
+
+	zap.S().Infof("transcoder, generated master.m3u8 hls file, %s\nm3u8file: %s", initialMasterHls.Variants[len(initialMasterHls.Variants)-1].URI, initialMasterHls.String())
+
 	cmdrunnerpool := externalcmd.NewPool()
 	_ = externalcmd.NewCmd(
 		cmdrunnerpool, cmdstring, true, make(externalcmd.Environment), nil)
-	return err
+
+	t.isReadToPlay()
+	t.wg.Wait()
+	return initialMasterHls.String(), nil
+}
+
+func (t *Transcoder) isReadToPlay() {
+	zap.S().Infof("transcoder: waiting for transcoder to start")
+	t.checkGeneratedTs()
+	zap.S().Infof("transcoder: ready to play")
+}
+
+func (t *Transcoder) checkGeneratedTs() error {
+	var foundTsChunks bool
+	for {
+		files := utils.FindFiles(t.CacheDir, ".ts")
+		zap.S().Infof("transcoder: found %d chunks", len(files))
+		for _, file := range files {
+			zap.S().Infof("transcoder: found %s file", file)
+			if strings.HasSuffix(file, ".ts") {
+				zap.S().Infof("transcoder: found %s", file)
+				foundTsChunks = true
+				break
+			}
+		}
+		if foundTsChunks {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	t.wg.Done()
+	return nil
 }
 
 func (t *Transcoder) generateCmdString() string {
-	prefix := fmt.Sprintf("%s -i \"%s\" -profile:v baseline -level 3.0 ", t.FfmpegBin, t.SourceHls)
+	prefix := fmt.Sprintf("%s -i \"%s\" -loglevel repeat+level+verbose -profile:v baseline -level 3.0 ", t.FfmpegBin, t.SourceHls)
 	suffixtree := make([]string, 0)
 
 	for _, varient := range t.Varients {
 		resolution := t.getResolution(varient)
 		if varient != "audio" {
 			segmentFilename := "%03d.ts"
-			cmd := fmt.Sprintf("-s %s -start_number 0 -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+split_by_time -hls_segment_filename %s/%s/%s -b:v 500k -maxrate 500k -bufsize 1000k -f hls %s/%s/%s.m3u8 ",
+			cmd := fmt.Sprintf("-s %s -start_number 0 -hls_time 2 -hls_list_size 10 -hls_flags delete_segments+split_by_time -hls_segment_filename %s/%s/%s -b:v 500k -maxrate 500k -bufsize 1000k -f hls %s/%s/%s.m3u8 ",
 				resolution,
 				t.CacheDir,
 				varient,
@@ -92,7 +153,7 @@ func (t *Transcoder) generateCmdString() string {
 
 		if varient == "audio" {
 			segmentFilename := "%03d.ts"
-			cmd := fmt.Sprintf("-map 0:a -start_number 0 -hls_time 2 -hls_list_size 3 -hls_flags delete_segments+split_by_time -hls_segment_filename %s/audio/%s -b:a 128k -f hls %s/audio/audio.m3u8 ",
+			cmd := fmt.Sprintf("-map 0:a -start_number 0 -hls_time 2 -hls_list_size 10 -hls_flags delete_segments+split_by_time -hls_segment_filename %s/audio/%s -b:a 128k -f hls %s/audio/audio.m3u8 ",
 				t.CacheDir,
 				segmentFilename,
 				t.CacheDir,
@@ -122,7 +183,7 @@ func (t *Transcoder) prepareOutputDir() {
 	}
 }
 
-func (t *Transcoder) generateMasterHls() error {
+func (t *Transcoder) generateMasterHls() (m3u8.MasterPlaylist, error) {
 	masterHls := m3u8.NewMasterPlaylist()
 
 	for _, varient := range t.Varients {
@@ -139,7 +200,7 @@ func (t *Transcoder) generateMasterHls() error {
 	masterfilepath := path.Join(t.CacheDir, "playlist.m3u8")
 	t.MasterHls = masterfilepath
 	err := t.writeFile(masterfilepath, []byte(masterHls.String()))
-	return err
+	return *masterHls, err
 }
 
 func (t *Transcoder) writeFile(filepath string, data []byte) error {

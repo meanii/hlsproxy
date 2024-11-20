@@ -28,13 +28,15 @@ func (s *Server) AddWildRouter() {
 		sourceHlsURL.Host = originServerHost.Host
 		sourceHlsURL.Scheme = originServerHost.Scheme
 		zap.S().Infof("source hls url registering %s", sourceHlsURL.String())
-		transcoderRunner := transcoder.NewTranscoder(sourceHlsURL.String(), "00000000001")
-		err := transcoderRunner.Run()
+		// id := uuid.New().String()
+		transcoderRunner := transcoder.NewTranscoder(sourceHlsURL.String(), "000000001")
+		m3u8string, err := transcoderRunner.Run()
 		if err != nil {
 			zap.S().Errorf("failed to start trasncoder, Error: %s", err)
 		}
 		w.WriteHeader(200)
-		w.Write([]byte(sourceHlsURL.String()))
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		w.Write([]byte(m3u8string))
 	})
 }
 
