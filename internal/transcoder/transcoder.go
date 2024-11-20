@@ -39,6 +39,7 @@ type Transcoder struct {
 	Varients           []string
 	VideoCodec         VideoCodecType
 	AudioCodec         AudioCodecType
+	AudioEnable        bool
 	OutputDir          string
 	VideoResolutionMap map[string]string
 	MasterHls          string
@@ -62,13 +63,46 @@ func NewTranscoder(source string, ID string) *Transcoder {
 		"1080p": "1920x1080",
 		"1440p": "2560x1440",
 		"2160p": "3840x2160",
-		"audio": "audio",
 	}
 	tscconfig.VideoCodec = H264
 	tscconfig.AudioCodec = AAC
 
 	tscconfig.MasterFileName = "playlist.m3u8"
 	return &tscconfig
+}
+
+func (t *Transcoder) SetConfig(varients []string, audio bool, videoCodec string, audioCodec string) {
+	if len(varients) >= 1 {
+		t.Varients = varients
+		zap.S().Infof("setting up varients %s", varients)
+	}
+
+	t.AudioEnable = audio
+	if audio {
+		t.Varients = append(t.Varients, "audio")
+	}
+
+	if videoCodec != "" {
+		zap.S().Infof("setting up videoCodec %s", videoCodec)
+		switch videoCodec {
+		case "h264":
+			t.VideoCodec = H264
+		case "h265":
+			t.VideoCodec = H265
+		default:
+			t.VideoCodec = H264
+		}
+	}
+
+	if audioCodec != "" {
+		zap.S().Infof("setting up audioCodec %s", audioCodec)
+		switch audioCodec {
+		case "AAC":
+			t.AudioCodec = AAC
+		default:
+			t.AudioCodec = AAC
+		}
+	}
 }
 
 func (t *Transcoder) Run() (string, error) {

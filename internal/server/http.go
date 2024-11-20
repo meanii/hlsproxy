@@ -18,13 +18,13 @@ type Server struct {
 }
 
 type rtmpConfigHTTP struct {
-	ID      string `json:"id"`
-	RtmpURL string `json:"rtmp_url"`
+	ID      string `json:"id" validate:"required"`
+	RtmpURL string `json:"rtmp_url" validate:"required"`
 	Config  struct {
 		Varients   []string `json:"varients"`
 		VideoCodec string   `json:"video_codec"`
 		AudioCodec string   `json:"audio_codec"`
-		Audio      bool     `json:"audio"`
+		Audio      bool     `json:"audio" validate:"required"`
 	} `json:"config"`
 }
 
@@ -51,6 +51,10 @@ func (s *Server) AddRtmpRouter() {
 
 		zap.S().Infof("starting rtpm hlsproxy %+v", rtmpBody)
 		tscRunner := transcoder.NewTranscoder(rtmpBody.RtmpURL, rtmpBody.ID)
+
+		zap.S().Infof("user specific config %+v", rtmpBody)
+		tscRunner.SetConfig(rtmpBody.Config.Varients, rtmpBody.Config.Audio, rtmpBody.Config.VideoCodec, rtmpBody.Config.AudioCodec)
+
 		_, err = tscRunner.Run()
 		if err != nil {
 			w.WriteHeader(500)

@@ -5,6 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/meanii/hlsproxy/config"
 	"github.com/meanii/hlsproxy/internal/externalcmd"
 	"go.uber.org/zap"
 )
@@ -15,6 +16,7 @@ func EnableGrafullyShutdown() {
 	signal.Notify(s, syscall.SIGTERM)
 	go func() {
 		<-s
+		// killing all running processes, in order to avoid ghost processes
 		for _, cmd := range externalcmd.GloblaActiveCmds {
 			zap.S().Infof("closing httpproxy gracefully...\ncmdstring: %s", cmd.GetCmdString())
 			syscall.Kill(-cmd.GetProcess().Pid, syscall.SIGINT)
@@ -24,7 +26,8 @@ func EnableGrafullyShutdown() {
 			}
 			zap.S().Infof("closed processid: %s", cmd.GetProcess().Pid)
 		}
-		// clean up here
+		// Removing output dir
+		os.RemoveAll(config.GetConfig("").Config.Output.Dirname)
 		os.Exit(0)
 	}()
 }
