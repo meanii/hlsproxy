@@ -36,7 +36,7 @@ type Cmd struct {
 	cmdDone   chan int
 }
 
-var GloblaActiveCmds []*Cmd
+var GloblaActiveCmds = make(map[string]*Cmd)
 
 // NewCmd allocates a Cmd.
 func NewCmd(
@@ -45,6 +45,7 @@ func NewCmd(
 	restart bool,
 	env Environment,
 	onExit OnExitFunc,
+	streamId string,
 ) *Cmd {
 	// replace variables in both Linux and Windows, in order to allow using the
 	// same commands on both of them.
@@ -72,7 +73,8 @@ func NewCmd(
 	pool.wg.Add(1)
 
 	go e.run()
-	GloblaActiveCmds = append(GloblaActiveCmds, e)
+
+	GloblaActiveCmds[streamId] = e
 
 	return e
 }
@@ -119,7 +121,6 @@ func (e *Cmd) run() {
 
 		select {
 		case <-time.After(restartPause):
-
 		case <-e.terminate:
 			return
 		}

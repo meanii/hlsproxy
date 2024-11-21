@@ -80,20 +80,27 @@ func (s *Server) AddRtmpRouter() {
 		}
 		zap.S().Infof("termanating running hls streaming ID:%s", id)
 
-		activeCmds := externalcmd.GloblaActiveCmds
-		zap.S().Infof("total number of runnings hls streaming Count:%s", len(activeCmds))
-		for _, cmd := range activeCmds {
-			if cmd.StreamID == id {
-				cmd.Done()
-				zap.S().Infof("closing httpproxy gracefully...\ncmdstring: %s", cmd.GetCmdString())
-				syscall.Kill(-cmd.GetProcess().Pid, syscall.SIGINT)
-				err := cmd.GetProcess().Kill()
-				if err != nil {
-					zap.S().Errorf("failed to terminate hls stream ID:%s", cmd.StreamID)
-				}
-				zap.S().Infof("closed processid: %s", cmd.GetProcess().Pid)
-			}
+		activeCmd := externalcmd.GloblaActiveCmds[id]
+		zap.S().Infof("total number of runnings hls streaming Count:%s \n current activeCmd: %s", len(externalcmd.GloblaActiveCmds), activeCmd)
+
+		if activeCmd == nil {
+			w.WriteHeader(400)
+			w.Write([]byte("stream id not found"))
+			return
 		}
+		activeCmd.Close()
+
+		zap.S().Infof("closing httpproxy gracefully...\ncmdstring: %s \nprocessid: %s", activeCmd.GetCmdString(), activeCmd.GetProcess().Pid)
+		syscall.Kill(-activeCmd.GetProcess().Pid, syscall.SIGINT)
+		err := activeCmd.GetProcess().Kill()
+
+		if err != nil {
+			zap.S().Errorf("failed to terminate hls stream ID:%s", activeCmd.StreamID)
+		}
+		zap.S().Infof("closed processid: %s", activeCmd.GetProcess().Pid)
+		delete(externalcmd.GloblaActiveCmds, id)
+
+		os.RemoveAll(config.GetConfig("").Config.Output.Dirname + "/" + id)
 
 		w.WriteHeader(200)
 		w.Write([]byte("success"))

@@ -161,7 +161,7 @@ func (t *Transcoder) Run() (string, error) {
 
 	cmdrunnerpool := externalcmd.NewPool()
 	rtmpPullCmd := externalcmd.NewCmd(
-		cmdrunnerpool, cmdstring, true, make(externalcmd.Environment), nil)
+		cmdrunnerpool, cmdstring, true, make(externalcmd.Environment), nil, t.ID)
 	rtmpPullCmd.SetStreamID(t.ID)
 
 	t.isReadToPlay()
